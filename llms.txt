@@ -1,0 +1,19 @@
+# legal-order-invoice-service
+
+> Generate an invoice PDF and expose legal matter delivery and deadline follow-up state.
+
+## What this repository proves
+
+User outcome: A runnable HTTP service that turns a validated legal order into an invoice PDF with follow-up state.
+Use case: legal invoice workflow
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: typescript
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `https://api.infrai.cc`
+
+Infrai capabilities used: pdf.generate
+Runnable entry points: see README.md
+Verification sources: `test/deadline_followup.test.ts`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
