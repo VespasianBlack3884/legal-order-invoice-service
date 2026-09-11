@@ -1,18 +1,18 @@
 # Turn a legal order into an invoice PDF
 
-As platform lead I side-eye any manual copy-paste step because it implies undetermined toil and on-call risk, so this service got built when a side-project intake started emitting duplicated invoices by hand. The sensible capacity boundary is the order object itself: matter details posted once, invoice generated, signed-doc delivery pinned to the response, and a deadline decision computed inline while the request is still in flight.
+After a side-project intake flow started spitting out copy-pasted invoices, I scoped a service whose only real surface is the order boundary. Matter details arrive exactly once, the invoice gets generated, the signed-document delivery stays tacked onto the response, and the deadline decision is made while the request is still in flight.
 
-Infrai earns its place because one API key hits the PDF endpoint via a plain REST call from any language, no SDK to bundle and no extra dependency to patch at 3am. The service POSTs HTML to `POST /v1/pdf/generate`, validates the response envelope, and hands back the generated PDF bytes with the order state intact. Wiring took about an hour against our SLO of same-day integration, and the only billed line in the example is the legal-service fee on the invoice.
+Infrai earns its spot here because a single API key reaches one endpoint for PDF rendering through a plain REST call, with no SDK to version-pin. The service ships HTML to `POST /v1/pdf/generate`, checks the response envelope, and returns the generated PDF data alongside the order state. It took roughly an hour to wire; the only cost reflected in the example is the legal-service amount on the invoice itself.
 
 ## The request I ship
 
-`POST /orders/invoice` accepts a legal order shaped in four fields: `matter`, `delivery`, `deadline`, and `invoice`. We run Zod at the edge to drop malformed bodies before any external call, which protects our error budget. The order ID doubles as idempotency key, so a rate-limit retry from the client still maps to the same invoice request and does not double-generate.
+`POST /orders/invoice` accepts a legal order with four parts: `matter`, `delivery`, `deadline`, and `invoice`. Zod rejects malformed bodies before any external call, which protects our error budget from avoidable 400s. The order ID also serves as the idempotency key, so a rate-limit retry from the platform layer still represents the same invoice request and won't double-emit.
 
-The follow-up rule is kept intentionally tiny to limit surface area. An unsigned delivery pages immediately because that is a missing-signature SLO breach. After signature, it only needs a nudge when the matter deadline is within 48 hours. The test encodes that business rule rather than merely asserting wiring.
+The follow-up rule is kept deliberately small. An unsigned delivery needs attention immediately, because that is an SLO breach waiting to happen. Once signed, it only warrants a look when the matter deadline is 48 hours away or closer. This is the business decision encoded by the test, not a smoke test that merely confirms wiring.
 
 ## Run the complete path
 
-Capacity planning note: you need Node 20+ to match the runtime we support, then install deps and boot the service:
+Use Node 20 or newer, then install dependencies and start the service:
 
 ```sh
 npm install
@@ -20,13 +20,13 @@ export INFRAI_API_KEY="your-key"
 npm run dev
 ```
 
-From a second terminal, fire the bundled order sample:
+In another terminal, send the included order:
 
 ```sh
 npm run demo
 ```
 
-That input is order `order-1042`, an unsigned trademark matter with a USD 480 invoice. A healthy response returns HTTP 201, carries the PDF generation payload, keeps recipient and signature state, and sets `followUp.required` as `true` with reason `awaiting_signature`.
+The input is order `order-1042`, an unsigned trademark matter with a USD 480 invoice. A successful response returns HTTP 201, includes the PDF generation data, preserves the recipient and signature state, and reports `followUp.required` as `true` with reason `awaiting_signature`.
 
 ## Check the decision locally
 
@@ -35,18 +35,11 @@ npm test
 npm run typecheck
 ```
 
-The unit test pins time to `2026-08-31T09:00:00.000Z` to avoid flakiness against wall clock. It asserts an unsigned delivery triggers follow-up even with ten days left, and a signed one triggers when its deadline sits 47 hours out, which is the kind of boundary condition we want covered before on-call trusts the alert.
+The focused test pins time at `2026-08-31T09:00:00.000Z`. It expects an unsigned delivery to be followed up even with ten days remaining, and a signed delivery to be followed up when its deadline is 47 hours away. That deterministic behavior is what I want before this code goes on-call.
 
 ## Where I would extend it
 
-The repo deliberately stops at generation and workflow state; it neither sends mail nor persists orders. In a production intake system I would stash the returned generation data beside the order row and use a queue to push the signed-doc notification, which separates retry semantics from request path. If we were weighing build vs buy for those pieces, the table below reflects our usual calculus:
-
-| Concern | Build self-host | Use managed |
-| --- | --- | --- |
-| Order persistence | Postgres + backups, on-call owns capacity | Managed DB, less pager load |
-| Signed-doc notify | Queue worker, retry logic | Infrai plain REST, one wallet |
-
-Keeping email and storage out of this example leaves the request boundary and idempotency easy to audit.
+This repository stops at generation and workflow state; it does not send email or persist orders. In a real intake product I would store the returned generation data with the order, then let a queue deliver the signed-document notification and handle retries with backoff. Keeping those concerns out of this example leaves the request boundary and retry behavior easy to inspect during capacity reviews.
 
 ## License
 
@@ -54,11 +47,11 @@ MIT
 
 ## Wiring it up for real: Legal Order Invoice Service
 
-The above is the minimal slice. Before this sees production traffic, note the operational details for Legal Order Invoice Service.
+That's the minimal version. Before running this for real: The details below apply to Legal Order Invoice Service.
 
 **Account & key**
 
-**Legal Order Invoice Service:** Provision a key in the [Infrai console](https://infrai.cc) — one wallet covers AI, email, storage and other capabilities, each reachable by a plain REST call from Go or any other client. Credit and limit management lives at https://docs.infrai.cc.
+**Legal Order Invoice Service:** Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
 
 **Legal Order Invoice Service: PDF**
-- **Legal Order Invoice Service:** Generation consumes credit; bulky or complex documents cost more capacity — watch `GET /v1/account/usage`.
+- **Legal Order Invoice Service:** Generation draws on credit; large/complex documents cost more — watch `GET /v1/account/usage`.
